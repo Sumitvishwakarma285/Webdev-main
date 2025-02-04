@@ -126,7 +126,6 @@ const Builder = () => {
       const response = await axios.post(`http://localhost:3000/template`, {
         prompt: prompt.trim()
       });
-      console.log(response);
       if (!response.data.uiPrompts?.[0]) {
         throw new Error("No UI prompts received");
       }
@@ -140,32 +139,37 @@ const Builder = () => {
         id: index + 1
       })));
 
-      const stepsResponse = await axios.post(`http://localhost:3000/chat`, {
-        messages: [...prompts, prompt].map(content => ({
-          role: "user",
-          content
-        }))
+      const stepsResponse = await axios.post("http://localhost:3000/chat", {
+        messages: [...prompts, prompt].map((content) => ({ role: "user", content })),
       });
 
-      const newSteps = parseXml(stepsResponse.data.response).map((x, index) => ({
-        ...x,
-        status: "pending",
-        id: steps.length + index + 1
-      }));
+      // if (!isMounted) return;
 
-      console.log(newSteps);
+      console.log("Raw Response from /chat:", stepsResponse.data.response);
 
-      setSteps(s => [...s, ...newSteps]);
-      setLlmMessages([
-        ...[...prompts, prompt].map(content => ({
-          role: "user",
-          content
-        })),
-        {
-          role: "assistant",
-          content: stepsResponse.data.response
-        }
-      ]);
+      const cleanedResponse = stepsResponse.data.response.replace(/<think>.*?<\/think>/gs, "").trim();
+      console.log("Cleaned Response:", cleanedResponse);
+
+      const fileBlocks = cleanedResponse.match(/```typescript\n\/\/ src\/(.*?)\n([\s\S]*?)```/g) || [];
+      
+      const extractedFiles = fileBlocks.map((block, index) => {
+        const match = block.match(/```typescript\n\/\/ src\/(.*?)\n([\s\S]*?)```/);
+        if (!match) return null;
+        const [, filePath, fileContent] = match;
+
+        return {
+          id: Date.now() + index,
+          path: `src/${filePath.trim()}`,
+          name: filePath.split("/").pop(),
+          type: "file",
+          content: fileContent.trim(),
+          status: "pending",
+        };
+      }).filter(Boolean);
+
+      console.log("Extracted Files:", extractedFiles);
+
+      setFiles((prevFiles) => [...prevFiles, ...extractedFiles]);
 
     } catch (error) {
       console.error("Error in initialization:", error);
@@ -182,7 +186,7 @@ const Builder = () => {
     try {
       setLoading(true);
       const newMessage = { role: "user", content: userPrompt };
-      const stepsResponse = await axios.post(`${BACKEND_URL}/chat`, {
+      const stepsResponse = await axios.post(`http://localhost:3000/chat`, {
         messages: [...llmMessages, newMessage]
       });
 
