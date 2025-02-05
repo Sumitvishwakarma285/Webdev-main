@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+ import React, { useEffect, useState } from 'react';
 import { useLocation, Navigate } from 'react-router-dom';
 import Editor from "@monaco-editor/react";
 import StepsList from '../components/StepsList';
@@ -158,26 +158,35 @@ useEffect(() => {
       const cleanedResponse = stepsResponse.data.response.replace(/<think>.*?<\/think>/gs, "").trim();
       console.log("Cleaned Response:", cleanedResponse);
 
-      const fileBlocks = cleanedResponse.match(/```typescript\n\/\/ src\/(.*?)\n([\s\S]*?)```/g) || [];
-      
-      const extractedFiles = fileBlocks.map((block, index) => {
-        const match = block.match(/```typescript\n\/\/ src\/(.*?)\n([\s\S]*?)```/);
-        if (!match) return null;
-        const [, filePath, fileContent] = match;
 
+
+      const jsxBlocks = cleanedResponse.match(/```jsx\n([\s\S]*?)```/g) || [];
+      const extractedFiles = jsxBlocks.map((block, index) => {
+        const match = block.match(/```jsx\n([\s\S]*?)```/);
+        if (!match) return null;
+      
+        const fileContent = match[1].trim();
+        
+
+        
+        // Extract the component name from `function ComponentName()`
+        const componentNameMatch = fileContent.match(/function\s+([A-Za-z0-9_]+)\s*\(/);
+        const componentName = componentNameMatch ? componentNameMatch[1] : `Component${index + 1}`;
+      
         return {
           id: Date.now() + index,
-          path: `src/${filePath.trim()}`,
-          name: filePath.split("/").pop(),
+          path: `src/components/${componentName}.jsx`,
+          name: `${componentName}.jsx`,
           type: "file",
-          content: fileContent.trim(),
+          content: fileContent,
           status: "pending",
         };
       }).filter(Boolean);
-
-      console.log("Extracted Files:", extractedFiles);
-
+      
+      console.log("Extracted JSX Files:", extractedFiles);
       setFiles((prevFiles) => [...prevFiles, ...extractedFiles]);
+      
+      
 
     } catch (error) {
       console.error("Error in initialization:", error);
@@ -296,7 +305,7 @@ useEffect(() => {
                 </div>
               )
             ) : (
-              <PreviewFrame webContainer={webcontainer} files={files} steps={steps} />
+              <PreviewFrame webContainer={webcontainer} files={files} />
             )}
           </div>
         </div>

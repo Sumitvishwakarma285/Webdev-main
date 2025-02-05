@@ -21,56 +21,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// app.post("/template", async (req, res) => {
-//   try {
-//     const prompt = req.body.prompt;
-//     if (!prompt) {
-//       return res.status(400).json({ error: "Prompt is required." });
-//     }
-
-//     // Call Groq API to determine project type (react or node)
-//     const response = await groq.chat.completions.create({
-//       messages: [{ role: "user", content: prompt }],
-//       model: "llama3-8b-8192",
-//       max_tokens: 200,
-//       temperature: 0.6,
-//       top_p: 1,
-//     });
-
-//     console.log("Groq API Response:", JSON.stringify(response, null, 2)); // Debugging log
-
-//     if (!response || !response.choices || !response.choices[0]?.message?.content) {
-//       return res.status(400).json({ error: "Invalid response from Groq API" });
-//     }
-
-//     const answer = response.choices[0].message.content.trim().toLowerCase(); // Normalize case
-
-//     if (answer.includes("react")) {
-//       return res.json({
-//         prompts: [
-//           BASE_PROMPT,
-//           `Here is an artifact that contains all files of the project visible to you.\nConsider the contents of ALL files in the project.\n\n${reactBasePrompt}\n\nHere is a list of files that exist on the file system but are not being shown to you:\n\n  - .gitignore\n  - package-lock.json\n`,
-//         ],
-//         uiPrompts: [reactBasePrompt],
-//       });
-//     }
-
-//     if (answer.includes("node")) {
-//       return res.json({
-//         prompts: [
-//           `Here is an artifact that contains all files of the project visible to you.\nConsider the contents of ALL files in the project.\n\n${nodeBasePrompt}\n\nHere is a list of files that exist on the file system but are not being shown to you:\n\n  - .gitignore\n  - package-lock.json\n`,
-//         ],
-//         uiPrompts: [nodeBasePrompt],
-//       });
-//     }
-
-//     // If response isn't "react" or "node", return it for debugging
-//     res.status(403).json({ message: "Invalid project type from Groq API", received: answer });
-//   } catch (error) {
-//     console.error("Error processing template request:", error);
-//     res.status(500).json({ error: "Internal Server Error" });
-//   }
-// });
 
 app.post("/template", async (req, res) => {
   try {
@@ -87,7 +37,7 @@ app.post("/template", async (req, res) => {
 
     const response = await groq.chat.completions.create({
       messages: [{ role: "user", content: refinedPrompt }],
-      model: "llama-3.3-70B-versatile",
+      model: "llama-3.2-3b-preview",
       max_tokens: 10,
       temperature: 0.3,
       top_p: 0.8,
@@ -118,9 +68,10 @@ app.post("/template", async (req, res) => {
         uiPrompts: [nodeBasePrompt],
       });
     }
-
+      console.log(response);
     res.status(403).json({ message: "Invalid project type from Groq API", received: answer });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
@@ -136,7 +87,7 @@ app.post("/chat", async (req, res) => {
     // Call Groq API for chat completion
     const response = await groq.chat.completions.create({
       messages: messages,
-      model: "llama-3.3-70B-versatile",
+      model: "llama-3.2-3b-preview",
       max_tokens: 8000,
       temperature: 0.7,
       top_p: 0.9,
