@@ -89,36 +89,46 @@ const Builder = () => {
     return () => { isMounted = false; };
   }, [steps, files]);
 
-  useEffect(() => {
-    if (!webcontainer || files.length === 0) return;
+useEffect(() => {
+  if (!webcontainer || files.length === 0) return;
 
-    const mountFiles = async () => {
-      const fileSystem = {};
-      
-      const processFile = (file) => {
-        if (file.type === 'folder') {
-          return {
-            directory: Object.fromEntries(
-              (file.children || []).map(child => [child.name, processFile(child)])
-            )
-          };
-        }
-        return {
-          file: {
-            contents: file.content || ''
+  const mountFiles = async () => {
+    const fileSystem = {};
+
+    files.forEach(file => {
+      const pathParts = file.path.split('/').filter(Boolean);
+      let currentDirectory = fileSystem;
+
+      pathParts.forEach((part, index) => {
+        if (!currentDirectory[part]) {
+          if (index === pathParts.length - 1) {
+            currentDirectory[part] = {
+              file: {
+                contents: file.content || ''
+              }
+            };
+          } else {
+            currentDirectory[part] = {};
           }
-        };
-      };
-
-      files.forEach(file => {
-        fileSystem[file.name] = processFile(file);
+        }
+        if (index === pathParts.length - 1) {
+          currentDirectory[part] = {
+            file: {
+              contents: file.content || ''
+            }
+          };
+        } else {
+          currentDirectory = currentDirectory[part];
+        }
       });
+    });
 
-      await webcontainer.mount(fileSystem);
-    };
+    console.log('File System:', fileSystem);
+    await webcontainer.mount(fileSystem);
+  };
 
-    mountFiles().catch(console.error);
-  }, [files, webcontainer]);
+  mountFiles().catch(console.error);
+}, [files, webcontainer]);
 
   const init = async () => {
     try {
@@ -144,8 +154,6 @@ const Builder = () => {
       });
 
       // if (!isMounted) return;
-
-      console.log("Raw Response from /chat:", stepsResponse.data.response);
 
       const cleanedResponse = stepsResponse.data.response.replace(/<think>.*?<\/think>/gs, "").trim();
       console.log("Cleaned Response:", cleanedResponse);
@@ -288,7 +296,7 @@ const Builder = () => {
                 </div>
               )
             ) : (
-              <PreviewFrame webContainer={webcontainer} files={files} />
+              <PreviewFrame webContainer={webcontainer} files={files} steps={steps} />
             )}
           </div>
         </div>

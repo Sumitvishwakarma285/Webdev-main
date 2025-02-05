@@ -46,13 +46,30 @@ const FileNode = ({ item, depth, onFileClick }) => {
 };
 
 /**
- * Convert a flat file structure into a nested file tree.
+ * Convert steps into files and merge with existing files.
+ * If a file exists in both, keep the content from `files` and discard `steps` content.
  */
-const buildFileTree = (flatFiles) => {
+const buildFileTree = (existingFiles, steps) => {
   const root = [];
   const pathMap = {};
+  const allFiles = [...existingFiles];
 
-  flatFiles.forEach((file) => {
+  steps.forEach((step) => {
+    if (step.type === "CreateFile" && step.path) {
+      const existingFile = allFiles.find((file) => file.path === step.path);
+      if (!existingFile) {
+        // Add new file if it doesn't exist in existing files
+        allFiles.push({
+          name: step.title || "Untitled Step",
+          path: step.path,
+          type: "file",
+          content: step.code || "",
+        });
+      }
+    }
+  });
+
+  allFiles.forEach((file) => {
     const parts = file.path.split("/");
     let currentLevel = root;
 
@@ -92,8 +109,8 @@ const buildFileTree = (flatFiles) => {
   return root;
 };
 
-const FileExplorer = ({ files, onFileSelect }) => {
-  const structuredFiles = useMemo(() => buildFileTree(files), [files]);
+const FileExplorer = ({ files, steps, onFileSelect }) => {
+  const structuredFiles = useMemo(() => buildFileTree(files, steps), [files, steps]);
 
   return (
     <div className="bg-gray-900 rounded-lg shadow-lg p-4 h-full overflow-auto">
