@@ -129,71 +129,120 @@ useEffect(() => {
 
   mountFiles().catch(console.error);
 }, [files, webcontainer]);
+const init = async () => {
+  try {
+    setLoading(true);
 
-  const init = async () => {
-    try {
-      setLoading(true);
-      const response = await axios.post(`http://localhost:3000/template`, {
-        prompt: prompt.trim()
-      });
-      if (!response.data.uiPrompts?.[0]) {
-        throw new Error("No UI prompts received");
-      }
+    // Fetch template
+    const response = await axios.post("http://localhost:3000/template", {
+      prompt: prompt.trim(),
+    });
 
-      setTemplateSet(true);
-      const { prompts, uiPrompts } = response.data;
+    if (!response.data.uiPrompts?.[0]) {
+      throw new Error("No UI prompts received");
+    }
 
-      setSteps(parseXml(uiPrompts[0]).map((x, index) => ({
+    setTemplateSet(true);
+    const { prompts, uiPrompts } = response.data;
+
+    setSteps(
+      parseXml(uiPrompts[0]).map((x, index) => ({
         ...x,
         status: "pending",
-        id: index + 1
-      })));
+        id: index + 1,
+      }))
+    );
 
-      const stepsResponse = await axios.post("http://localhost:3000/chat", {
-        messages: [...prompts, prompt].map((content) => ({ role: "user", content })),
+    // Fetch AI-generated response
+    const stepsResponse = await axios.post("http://localhost:3000/chat", {
+      messages: [...prompts, prompt].map((content) => ({
+        role: "user",
+        content,
+      })),
+    });
+
+    const cleanedResponse = stepsResponse.data.response
+      .replace(/<think>.*?<\/think>/gs, "")
+      .trim();
+
+    console.log("Cleaned Response:", cleanedResponse);
+
+    // Regex to match **filename** followed by a code block
+    const fileRegex = /\*\*(.+?)\*\*\s*```(\w+)?\s*([\s\S]+?)```/g;
+    let extractedFiles = [];
+    let packageJsonContent = null;
+
+    let match;
+    while ((match = fileRegex.exec(cleanedResponse)) !== null) {
+      const filePath = match[1].trim();
+      const fileContent = match[3].trim();
+
+      // Special handling for package.json
+      if (filePath === "package.json") {
+        try {
+          packageJsonContent = JSON.parse(fileContent);
+        } catch (err) {
+          console.error("Error parsing package.json:", err);
+        }
+      }
+
+      extractedFiles.push({
+        id: Date.now() + extractedFiles.length,
+        path: filePath,
+        name: filePath.split("/").pop(),
+        type: "file",
+        content: fileContent,
+        status: "completed",
       });
-
-      // if (!isMounted) return;
-
-      const cleanedResponse = stepsResponse.data.response.replace(/<think>.*?<\/think>/gs, "").trim();
-      console.log("Cleaned Response:", cleanedResponse);
-
-
-
-      const jsxBlocks = cleanedResponse.match(/```jsx\n([\s\S]*?)```/g) || [];
-      const extractedFiles = jsxBlocks.map((block, index) => {
-        const match = block.match(/```jsx\n([\s\S]*?)```/);
-        if (!match) return null;
-      
-        const fileContent = match[1].trim();
-        
-
-        
-        // Extract the component name from `function ComponentName()`
-        const componentNameMatch = fileContent.match(/function\s+([A-Za-z0-9_]+)\s*\(/);
-        const componentName = componentNameMatch ? componentNameMatch[1] : `Component${index + 1}`;
-      
-        return {
-          id: Date.now() + index,
-          path: `src/components/${componentName}.jsx`,
-          name: `${componentName}.jsx`,
-          type: "file",
-          content: fileContent,
-          status: "pending",
-        };
-      }).filter(Boolean);
-      
-      console.log("Extracted JSX Files:", extractedFiles);
-      setFiles((prevFiles) => [...prevFiles, ...extractedFiles]);
-      
-      
-
-    } catch (error) {
-      console.error("Error in initialization:", error);
-    } finally {
-      setLoading(false);
     }
-  };
+
+    // Check if package.json already exists, if not, add a default one
+    const packageExists = extractedFiles.some(file => file.path === "package.json");
+    
+    if (!packageExists) {
+      if (!packageJsonContent) {
+        packageJsonContent = {
+          name: "react-app",
+          version: "1.0.0",
+          private: true,
+          dependencies: {
+            react: "^18.2.0",
+            "react-dom": "^18.2.0",
+            "react-router-dom": "^6.14.1",
+            axios: "^1.3.5",
+            tailwindcss: "^3.3.5",
+          },
+          devDependencies: {
+            vite: "^4.4.0",
+          },
+          scripts: {
+            start: "vite",
+            build: "vite build",
+            serve: "vite preview",
+          },
+        };
+      }
+
+      extractedFiles.push({
+        id: Date.now() + extractedFiles.length,
+        path: "package.json",
+        name: "package.json",
+        type: "file",
+        content: JSON.stringify(packageJsonContent, null, 2),
+        status: "pending",
+      });
+    }
+
+    console.log("Extracted Files:", extractedFiles);
+    setFiles((prevFiles) => [...prevFiles, ...extractedFiles]);
+  } catch (error) {
+    console.error("Error in initialization:", error);
+  } finally {
+    setLoading(false);
+  }
+};
+
+
 
   useEffect(() => {
     init();
