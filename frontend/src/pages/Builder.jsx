@@ -26,6 +26,7 @@ const Builder = () => {
   const [steps, setSteps] = useState([]);
   const [files, setFiles] = useState([]);
 
+
   if (!prompt) return <Navigate to="/" replace />;
 
   useEffect(() => {
@@ -89,83 +90,140 @@ const Builder = () => {
     return () => { isMounted = false; };
   }, [steps, files]);
 
-  useEffect(() => {
-    if (!webcontainer || (files.length === 0 && steps.length === 0)) return;
-
-    const mountFiles = async () => {
-      let allFiles = [...files, ...steps];
-      
-      // Ensure package.json exists
-      const packageJsonExists = allFiles.some(file => file.path === "package.json");
-      if (!packageJsonExists) {
-        const defaultPackageJson = {
-          id: Date.now(),
-          path: "package.json",
-          name: "package.json",
-          type: "file",
-          content: JSON.stringify({
-            name: "react-app",
-            version: "1.0.0",
-            private: true,
-            dependencies: {
-              react: "^18.2.0",
-              "react-dom": "^18.2.0",
-              "react-router-dom": "^6.14.1",
-              axios: "^1.3.5",
-              tailwindcss: "^3.3.5"
-            },
-            devDependencies: {
-              vite: "^4.4.0"
-            },
-            scripts: {
-              start: "vite",
-              build: "vite build",
-              serve: "vite preview"
-            }
-          }, null, 2),
-          status: "completed"
-        };
-        allFiles = [...allFiles, defaultPackageJson];
-      }
-      
-      const fileSystem = {};
-      allFiles.forEach(file => {
-        const pathParts = file.path.split('/').filter(Boolean);
-        let currentDirectory = fileSystem;
-
-        pathParts.forEach((part, index) => {
-          if (!currentDirectory[part]) {
-            if (index === pathParts.length - 1) {
-              currentDirectory[part] = {
-                file: {
-                  contents: file.content || ''
+  const useWebContainerMount = ({ webcontainer, files = [], steps = [] }) => {
+    useEffect(() => {
+      if (!webcontainer || (files.length === 0 && steps.length === 0)) return;
+  
+      const mountFiles = async () => {
+        try {
+          // Process files from both files array and steps
+          const processedFiles = [...files];
+          
+          // Process CREATE_FILE steps
+          steps.forEach(step => {
+            if (step?.type === 'CREATE_FILE' && step.path && step.code) {
+              const parsedPath = step.path.split('/').filter(Boolean);
+              let currentPath = '';
+              
+              for (let i = 0; i < parsedPath.length; i++) {
+                const part = parsedPath[i];
+                currentPath = currentPath ? `${currentPath}/${part}` : part;
+                
+                if (i === parsedPath.length - 1) {
+                  // This is a file
+                  const existingFileIndex = processedFiles.findIndex(f => f.path === currentPath);
+                  const newFile = {
+                    id: Date.now(),
+                    path: currentPath,
+                    name: part,
+                    type: 'file',
+                    content: step.code,
+                    status: 'completed'
+                  };
+  
+                  if (existingFileIndex !== -1) {
+                    processedFiles[existingFileIndex] = newFile;
+                  } else {
+                    processedFiles.push(newFile);
+                  }
                 }
-              };
-            } else {
-              currentDirectory[part] = {};
-            }
-          }
-          if (index === pathParts.length - 1) {
-            currentDirectory[part] = {
-              file: {
-                contents: file.content || ''
               }
-            };
-          } else {
-            currentDirectory = currentDirectory[part];
+            }
+          });
+  
+          // Ensure package.json exists
+          const packageJsonExists = processedFiles.some(file => file.path === 'package.json');
+          if (!packageJsonExists) {
+            processedFiles.push({
+              id: Date.now(),
+              path: 'package.json',
+              name: 'package.json',
+              type: 'file',
+              content: JSON.stringify({
+                name: 'react-app',
+                version: '1.0.0',
+                private: true,
+                dependencies: {
+                  react: '^18.2.0',
+                  'react-dom': '^18.2.0',
+                  'react-router-dom': '^6.14.1',
+                  axios: '^1.3.5',
+                  tailwindcss: '^3.3.5'
+                },
+                devDependencies: {
+                  vite: '^4.4.0'
+                },
+                scripts: {
+                  start: 'vite',
+                  build: 'vite build',
+                  serve: 'vite preview'
+                }
+              }, null, 2),
+              status: 'completed'
+            });
           }
-        });
+  
+          // Convert to WebContainer filesystem format
+          const buildFileSystem = (processedFiles) => {
+            const fileSystem = {};
+  
+            processedFiles.forEach(file => {
+              if (file.type === 'file') {
+                const pathParts = file.path.split('/').filter(Boolean);
+                let currentLevel = fileSystem;
+  
+                pathParts.forEach((part, index) => {
+                  const isLastPart = index === pathParts.length - 1;
+  
+                  if (isLastPart) {
+                    currentLevel[part] = {
+                      file: {
+                        contents: file.content || ''
+                      }
+                    };
+                  } else {
+                    currentLevel[part] = currentLevel[part] || {};
+                    currentLevel = currentLevel[part];
+                  }
+                });
+              }
+            });
+  
+            return fileSystem;
+          };
+  
+          const fileSystem = buildFileSystem(processedFiles);
+          console.log('Mounting file system:', fileSystem);
+  
+          // Mount files
+          await webcontainer.mount(fileSystem);
+  
+          // Install dependencies
+          const installProcess = await webcontainer.spawn('npm', ['install']);
+          
+          installProcess.output.pipeTo(new WritableStream({
+            write(data) {
+              console.log('npm install:', data);
+            }
+          }));
+  
+          const exitCode = await installProcess.exit;
+          if (exitCode !== 0) {
+            throw new Error(`npm install failed with exit code ${exitCode}`);
+          }
+  
+          return true;
+        } catch (error) {
+          console.error('Error mounting files:', error);
+          throw error;
+        }
+      };
+  
+      mountFiles().catch(error => {
+        console.error('Failed to mount files:', error);
       });
-
-      console.log('File System:', fileSystem);
-      await webcontainer.mount(fileSystem);
-
-      // Ensure dependencies are installed after mounting
-      await webcontainer.spawn("npm", ["install"]).catch(console.error);
-    };
-
-    mountFiles().catch(console.error);
-  }, [files, steps, webcontainer]);
+    }, [files, steps, webcontainer]);
+  };
 const init = async () => {
   try {
     setLoading(true);
@@ -278,8 +336,6 @@ const init = async () => {
     setLoading(false);
   }
 };
-
-
 
   useEffect(() => {
     init();
