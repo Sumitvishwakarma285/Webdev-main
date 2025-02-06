@@ -37,7 +37,7 @@ app.post("/template", async (req, res) => {
 
     const response = await groq.chat.completions.create({
       messages: [{ role: "user", content: refinedPrompt }],
-      model: "deepseek-r1-distill-llama-70b",
+      model: "llama-3.3-70b-versatile",
       max_tokens: 10,
       temperature: 0.3,
       top_p: 0.8,
@@ -87,7 +87,7 @@ app.post("/chat", async (req, res) => {
     // Call Groq API for chat completion
     const response = await groq.chat.completions.create({
       messages: messages,
-      model: "deepseek-r1-distill-llama-70b",
+      model: "llama-3.3-70b-versatile",
       max_tokens: 8000,
       temperature: 0.7,
       top_p: 0.9,
